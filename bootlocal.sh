@@ -1,50 +1,67 @@
 #!/bin/sh
 
 network="eth0"
-ip=
-netmask=
-gateway=
+ip=""
+netmask="255.255.255.0"
+gateway=""
+ssh_port="22"
+nameservers=""
 
 parse_parameter() {
-    while IFS="" read -r line
-    do
-        for x in $line; do
-            key=$(echo "$x" | cut -d'=' -f1)
-            value=$(echo "$x" | cut -d'=' -f2)
-            case "$key" in
-                password)
+    for x in $(cat /proc/cmdline); do
+        case "$x" in
+            password=*)
+                value=$(echo "$x" | cut -d'=' -f2-)
                 echo "tc:$value" | chpasswd
                 ;;
-                ip)
-                ip=$value
+            ip=*)
+                ip=$(echo "$x" | cut -d'=' -f2-)
                 ;;
-                netmask)
-                netmask=$value
+            netmask=*)
+                netmask=$(echo "$x" | cut -d'=' -f2-)
                 ;;
-                gateway)
-                gateway=$value
+            gateway=*)
+                gateway=$(echo "$x" | cut -d'=' -f2-)
                 ;;
-                nameserver)
-                echo "nameserver $value" >> /etc/resolv.conf
+            nameserver=*)
+                nameservers=$(echo "$x" | cut -d'=' -f2-)
                 ;;
-            esac
-        done
-    done < /proc/cmdline
+            ssh_port=*)
+                ssh_port=$(echo "$x" | cut -d'=' -f2-)
+                ;;
+        esac
+    done
 }
 
 configure_network() {
     if [ -n "$ip" ]; then
-        ifconfig $network "$ip" netmask "$netmask"
-        ifconfig $network up
-        route add default gw "$gateway" $network
-        echo "IP: $ip"
+        echo "Configuring static IP: $ip"
+        ifconfig "$network" "$ip" netmask "$netmask"
+        ifconfig "$network" up
+        [ -n "$gateway" ] && route add default gw "$gateway" "$network"
     else
-        ifconfig eth0 | grep "inet addr" | awk '{ print $2}' | awk -F: '{print "IP: "$2}'
+        echo "Auto configuring $network (DHCP)"
+        /sbin/udhcpc -i "$network" -n -q
     fi
-    sleep 10
+
+    if [ -n "$nameservers" ]; then
+        echo "Configuring nameservers: $nameservers"
+        : > /etc/resolv.conf
+        echo "$nameservers" | tr ',' '\n' | while read ns; do
+            [ -n "$ns" ] && echo "nameserver $ns" >> /etc/resolv.conf
+        done
+    fi
+}
+
+configure_ssh() {
+    if [ -n "$ssh_port" ]; then
+        echo "Configuring SSH on port: $ssh_port"
+        sed -i "s/^#Port 22/Port $ssh_port/" /usr/local/etc/ssh/sshd_config
+        sed -i "s/^Port [0-9]*/Port $ssh_port/" /usr/local/etc/ssh/sshd_config
+    fi
 }
 
 parse_parameter
 configure_network
-/usr/local/etc/init.d/openssh start >> /dev/null 2>&1
-/bin/sh
+configure_ssh
+/usr/local/etc/init.d/openssh start
