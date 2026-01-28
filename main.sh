@@ -2,9 +2,9 @@
 
 temp_dir="/tmp/tclxebY2XrKE6CGcH"
 current_dir=$(pwd)
-CorePure64_url="http://tinycorelinux.net/13.x/x86_64/release/CorePure64-13.1.iso"
-CorePure64_name="CorePure64-13.1.iso"
-tcz_version="13.x"
+CorePure64_url="http://tinycorelinux.net/15.x/x86_64/release/CorePure64-15.0.iso"
+CorePure64_name="CorePure64-15.0.iso"
+tcz_version="15.x"
 
 trap _exit INT QUIT TERM
 
@@ -93,12 +93,13 @@ install_package() {
 }
 
 extract_file() {
-    7z x $temp_dir/down/CorePure64-13.1.iso -o$temp_dir/mnt
+    7z x $temp_dir/down/$CorePure64_name -o$temp_dir/mnt
     cp -ar $temp_dir/mnt/boot/corepure64.gz $temp_dir/mnt/boot/vmlinuz64 $temp_dir/mnt/boot/isolinux $temp_dir
     pushd $temp_dir/ext || _error "pushd $temp_dir/ext\n"
     zcat $temp_dir/corepure64.gz | cpio -i -H newc -d
     popd || _error "popd $temp_dir/ext\n"
     install_package "openssh"
+    install_package "openssl"
     install_package "openssl-1.1.1"
     install_package "e2fsprogs"
     install_package "dosfstools"
@@ -122,6 +123,7 @@ extract_file() {
     # wget
     install_package "ca-certificates"
     install_package "wget"
+    install_package "pv"
 
     pushd $temp_dir/ext || _error "pushd $temp_dir/ext\n"
     cp -a usr/local/etc/ssh/sshd_config.orig usr/local/etc/ssh/sshd_config
@@ -132,10 +134,12 @@ extract_file() {
     mount --bind /dev dev/
     mount --bind /run run/
     echo "nameserver 8.8.4.4" > etc/resolv.conf
-    chroot . /bin/sh <<'EOF'
-export PS1="(chroot) $PS1"
-echo "tc:toor" | chpasswd # toor
-for i in `ls -1 /usr/local/tce.installed`; do sudo /usr/local/tce.installed/$i ; done
+    chroot . /bin/sh <<EOF
+export PS1="(chroot) \$PS1"
+echo "tc:${PASSWORD:-toor}" | chpasswd
+/sbin/ldconfig
+for i in \`ls -1 /usr/local/tce.installed\`; do [ -f /usr/local/tce.installed/\$i ] && sh /usr/local/tce.installed/\$i ; done
+/sbin/ldconfig
 exit
 EOF
     umount -f proc sys dev run
@@ -146,6 +150,18 @@ EOF
     advdef -z4 $temp_dir/my_core.gz
     # change isolinux/isolinux.cfg  timeout 10
     sed -i 's/timeout 300/timeout 10/g' $temp_dir/isolinux/isolinux.cfg
+    # append boot parameters
+    BOOT_PARAMS=""
+    [ -n "$PASSWORD" ] && BOOT_PARAMS="$BOOT_PARAMS password=$PASSWORD"
+    [ -n "$IP" ] && BOOT_PARAMS="$BOOT_PARAMS ip=$IP"
+    [ -n "$NETMASK" ] && BOOT_PARAMS="$BOOT_PARAMS netmask=$NETMASK"
+    [ -n "$GATEWAY" ] && BOOT_PARAMS="$BOOT_PARAMS gateway=$GATEWAY"
+    [ -n "$NAMESERVER" ] && BOOT_PARAMS="$BOOT_PARAMS nameserver=$NAMESERVER"
+    [ -n "$SSH_PORT" ] && BOOT_PARAMS="$BOOT_PARAMS ssh_port=$SSH_PORT"
+
+    if [ -n "$BOOT_PARAMS" ]; then
+        sed -i "/append loglevel=3/ s/$/$BOOT_PARAMS/" $temp_dir/isolinux/isolinux.cfg
+    fi
     ls $temp_dir
 }
 

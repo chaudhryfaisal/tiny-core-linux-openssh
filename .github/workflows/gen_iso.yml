@@ -4,6 +4,30 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      password:
+        description: 'Password for tc user'
+        default: 'toor'
+        required: false
+      ip:
+        description: 'Static IP address (leave empty for DHCP)'
+        required: false
+      netmask:
+        description: 'Subnet mask'
+        default: '255.255.255.0'
+        required: false
+      gateway:
+        description: 'Default gateway'
+        required: false
+      nameserver:
+        description: 'DNS server'
+        default: '8.8.8.8'
+        required: false
+      ssh_port:
+        description: 'SSH port'
+        default: '22'
+        required: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -19,7 +43,13 @@ jobs:
 
       - name: Run Script
         run: |
-          sudo bash main.sh
+          sudo PASSWORD="${{ github.event.inputs.password }}" \
+               IP="${{ github.event.inputs.ip }}" \
+               NETMASK="${{ github.event.inputs.netmask }}" \
+               GATEWAY="${{ github.event.inputs.gateway }}" \
+               NAMESERVER="${{ github.event.inputs.nameserver }}" \
+               SSH_PORT="${{ github.event.inputs.ssh_port }}" \
+               bash main.sh
 
       - name: Upload artifact
         uses: actions/upload-artifact@main
