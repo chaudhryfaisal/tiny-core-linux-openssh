@@ -18,8 +18,8 @@ on:
         description: 'Default gateway'
         required: false
       nameserver:
-        description: 'DNS server'
-        default: '8.8.8.8'
+        description: 'DNS server(s) (comma separated)'
+        default: '8.8.8.8,1.1.1.1'
         required: false
       ssh_port:
         description: 'SSH port'

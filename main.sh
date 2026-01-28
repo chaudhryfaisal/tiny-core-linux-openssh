@@ -5,6 +5,7 @@ current_dir=$(pwd)
 CorePure64_url="http://tinycorelinux.net/15.x/x86_64/release/CorePure64-15.0.iso"
 CorePure64_name="CorePure64-15.0.iso"
 tcz_version="15.x"
+kernel_version="6.6.8-tinycore64"
 
 trap _exit INT QUIT TERM
 
@@ -35,6 +36,12 @@ _exists() {
 
 _error() {
     _red "[Error]: $1\n"
+    rm -fr $temp_dir
+    exit 1
+}
+
+_exit() {
+    _red "Terminated by user\n"
     rm -fr $temp_dir
     exit 1
 }
@@ -80,10 +87,11 @@ download_files() {
 
 install_package() {
     local pacakge_name="$1"
+    [ -z "$pacakge_name" ] && return
     pushd $temp_dir/down || _error "pushd $temp_dir/down\n"
     wget -q "http://tinycorelinux.net/${tcz_version}/x86_64/tcz/${pacakge_name}.tcz" -O "$pacakge_name".tcz
     wget -q "http://tinycorelinux.net/${tcz_version}/x86_64/tcz/${pacakge_name}.tcz.md5.txt" -O "$pacakge_name".tcz.md5.txt
-    md5sum -c "$pacakge_name".tcz.md5.txt || _red "md5 check error \n"
+    md5sum -c "$pacakge_name".tcz.md5.txt || _error "md5 check error for $pacakge_name\n"
     popd || _error "popd $temp_dir/down\n"
     _green "package $pacakge_name download succeeded\n"
     pushd $temp_dir/ext || _error "pushd $temp_dir/ext\n"
@@ -98,32 +106,31 @@ extract_file() {
     pushd $temp_dir/ext || _error "pushd $temp_dir/ext\n"
     zcat $temp_dir/corepure64.gz | cpio -i -H newc -d
     popd || _error "popd $temp_dir/ext\n"
+
+    # Base packages for SSH and rsync
     install_package "openssh"
     install_package "openssl"
-    install_package "openssl-1.1.1"
-    install_package "e2fsprogs"
-    install_package "dosfstools"
-    # grub2
-    install_package "ncursesw"
-    install_package "udev-lib"
-    install_package "libburn"
-    install_package "libisofs"
-    install_package "readline"
-    install_package "libisoburn"
-    install_package "mtools"
+    install_package "ipv6-netfilter-${kernel_version}"
+    install_package "rsync"
+    install_package "attr"
+    install_package "acl"
+    install_package "liblz4"
+    install_package "xxhash"
+    install_package "libzstd"
+    install_package "pv"
     install_package "glibc_gconv"
-    install_package "liblzma"
-    install_package "liblvm2"
-    install_package "grub2-multi"
-    # util-linux
     install_package "util-linux"
-    # tar and xz
     install_package "tar"
     install_package "xz"
-    # wget
     install_package "ca-certificates"
     install_package "wget"
-    install_package "pv"
+
+    # Install extra packages from environment variable
+    if [ -n "$EXTRA_PACKAGES" ]; then
+        echo "$EXTRA_PACKAGES" | tr ',' '\n' | while read pkg; do
+            [ -n "$pkg" ] && install_package "$pkg"
+        done
+    fi
 
     pushd $temp_dir/ext || _error "pushd $temp_dir/ext\n"
     cp -a usr/local/etc/ssh/sshd_config.orig usr/local/etc/ssh/sshd_config
@@ -172,17 +179,6 @@ create_iso() {
     xorriso -as mkisofs -l -J -R -V TC-custom -no-emul-boot -boot-load-size 4 \
         -boot-info-table -b /boot/isolinux/isolinux.bin \
         -c /boot/isolinux/boot.cat -o /tmp/tcl.iso $temp_dir/new
-    # xorriso -as mkisofs \
-    #     -o $temp_dir/TC-remastered.iso \
-    #     -isohybrid-mbr syslinux-6.03/bios/mbr/isohdpfx.bin \
-    #     -c boot.cat \
-    #     -b isolinux.bin \
-    #     -no-emul-boot -boot-load-size 4 -boot-info-table \
-    #     -eltorito-alt-boot \
-    #     -e uefi.img \
-    #     -no-emul-boot \
-    #     -isohybrid-gpt-basdat \
-    #     ./isobios
 }
 
 # check root account

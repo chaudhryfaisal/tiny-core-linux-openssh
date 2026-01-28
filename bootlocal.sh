@@ -5,6 +5,7 @@ ip=""
 netmask="255.255.255.0"
 gateway=""
 ssh_port="22"
+nameservers=""
 
 parse_parameter() {
     for x in $(cat /proc/cmdline); do
@@ -23,8 +24,7 @@ parse_parameter() {
                 gateway=$(echo "$x" | cut -d'=' -f2-)
                 ;;
             nameserver=*)
-                value=$(echo "$x" | cut -d'=' -f2-)
-                echo "nameserver $value" > /etc/resolv.conf
+                nameservers=$(echo "$x" | cut -d'=' -f2-)
                 ;;
             ssh_port=*)
                 ssh_port=$(echo "$x" | cut -d'=' -f2-)
@@ -42,6 +42,14 @@ configure_network() {
     else
         echo "Auto configuring $network (DHCP)"
         /sbin/udhcpc -i "$network" -n -q
+    fi
+
+    if [ -n "$nameservers" ]; then
+        echo "Configuring nameservers: $nameservers"
+        : > /etc/resolv.conf
+        echo "$nameservers" | tr ',' '\n' | while read ns; do
+            [ -n "$ns" ] && echo "nameserver $ns" >> /etc/resolv.conf
+        done
     fi
 }
 
